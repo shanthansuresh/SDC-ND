@@ -1,0 +1,4 @@
+#ifndef _BEHAVIOR_PLANNER_H_
+#define _BEHAVIOR_PLANNER_H_
+
+#endif //_BEHAVIOR_PLANNER_H_
