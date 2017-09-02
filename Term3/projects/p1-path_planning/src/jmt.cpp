@@ -49,14 +49,14 @@ double JMT::calculate_cost(pair<Poly, Poly> const &traj, vector<double> const &g
 
   double cost = 0.0;
 
-#if 0
+#if 1
   // first situations that immediately make a trajectory infeasible
-  double ex_sp_lim_cost = exceeds_speed_limit_cost(traj, goal, vehicles);
-  double ex_acc_lim_cost = exceeds_accel_cost(traj, goal, vehicles);
-  double ex_jerk_lim_cost = exceeds_jerk_cost(traj, goal, vehicles);
-  double col_cost = collision_cost(traj, goal, vehicles);
+  //double ex_sp_lim_cost = exceeds_speed_limit_cost(traj, goal, vehicles);
+  //double ex_acc_lim_cost = exceeds_accel_cost(traj, goal, vehicles);
+  //double ex_jerk_lim_cost = exceeds_jerk_cost(traj, goal, vehicles);
+  double col_cost = collision_cost(traj, vehicles);
 
-  double infeasible_costs = ex_sp_lim_cost + ex_acc_lim_cost + ex_jerk_lim_cost + col_cost;
+  double infeasible_costs = /*ex_sp_lim_cost + ex_acc_lim_cost + ex_jerk_lim_cost + */ col_cost;
   if (infeasible_costs > 0.0) {
     all_costs.push_back({999999});
     return 999999;
@@ -107,7 +107,7 @@ void JMT::get_stats_per_horizon(plan_params oplan_params) {
 }
 
 vector<vector<double>> JMT::generate_goal_points(car_state ocar_state, unsigned char next_feasible_states,
-    plan_params oplan_params, lane_info olane_info) {
+    plan_params oplan_params, lane_info olane_info, vector<Vehicle> env_veh) {
    
     vector<vector<double>> goal_points;
     double goal_s_pos;
@@ -116,12 +116,17 @@ vector<vector<double>> JMT::generate_goal_points(car_state ocar_state, unsigned 
     double goal_d_pos;
     double goal_d_vel;
     double goal_d_acc;
-    
+   
+    int cur_lane = olane_info.current_lane;
+    vector<int> nearest_veh_lanes = olane_info.nearest_veh_lanes;
+ 
+    double lead_s = env_veh[nearest_veh_lanes[cur_lane]].get_s();
+    double lead_s_dot = env_veh[nearest_veh_lanes[cur_lane]].get_s_dot();
+
     // Go straight
     if (((next_feasible_states>>0) & 0x3) != 0x0) {
         cout << "Going straight" << endl;
-        double delta_s = distance_over_horizon;
-        goal_s_pos = ocar_state.s_pos + delta_s;
+        goal_s_pos = ocar_state.s_pos + distance_over_horizon;
         goal_s_vel = velocity_per_timestep;
         goal_s_acc = 0;
         goal_d_pos = 2 + 4*olane_info.current_lane;
@@ -130,10 +135,10 @@ vector<vector<double>> JMT::generate_goal_points(car_state ocar_state, unsigned 
 
         vector<double> goal_vec = {goal_s_pos, goal_s_vel, goal_s_acc, goal_d_pos, goal_d_vel, goal_d_acc};
 
-cout << "goal_vec: " << endl;
-for (int kk=0; kk<goal_vec.size(); kk++) {
- cout << "goal_vec: " << goal_vec[kk] << ", ";
-}
+//cout << "goal_vec: " << endl;
+//for (int kk=0; kk<goal_vec.size(); kk++) {
+// cout << "goal_vec: " << goal_vec[kk] << ", ";
+//}
 
         vector<vector<double>> goal_points_straight = {goal_vec};
         perturb_goal(goal_vec, goal_points_straight); //TODO: Enable this
@@ -144,17 +149,94 @@ for (int kk=0; kk<goal_vec.size(); kk++) {
     // Go straight and follow lead vehicle
     if (((next_feasible_states>>2) & 0x3) != 0x0) {
         cout << "Going straight and following lead vehicle" << endl;
+
+//TODO: Revisit
+#if 0    
+    // "EMERGENCY BREAK ASSIST" to the drive assist
+    // if much slower vehicle pulls into lane dangerously close in front of us,
+    if (((lead_s[0] - start_s[0]) < _col_buf_length * 0.5) && (lead_s[1] < start_s[1] * 0.8)) {
+      cout << "EMERGENCY" << endl;
+      // reducing horizon to reduce speed faster
+      _current_action = "emergency";
+      _horizon = 120;
+      // and hold lane - getting forced into other lane in a small horizon will exceed force limits
+      change_left = false;
+      change_right = false;
+    } 
+#endif
+   
+    double goal_s_pos = ocar_state.s_pos + lead_s_dot * horizon;
+    double goal_s_vel = lead_s_dot; //TODO: Revert this
+    double goal_s_acc = 0.0;
+    double goal_d_pos = 2 + 4 * cur_lane;
+    double goal_d_vel = 0.0;
+    double goal_d_acc = 0.0;
+    vector<double> goal_vec = {goal_s_pos, goal_s_vel, goal_s_acc, goal_d_pos, goal_d_vel, goal_d_acc};
+    vector<vector<double>> goal_points_follow = {goal_vec};
+    perturb_goal(goal_vec, goal_points_follow);
+    // add to goal points
+    goal_points.reserve(goal_points.size() + goal_points_follow.size());
+    goal_points.insert(goal_points.end(),goal_points_follow.begin(),goal_points_follow.end());
+
     }
    
     // Switch to left lane
-    if (((next_feasible_states>>4) & 0x3) != 0x0) {
+    if ((((next_feasible_states>>4) & 0x3) != 0x0) && (cur_lane != 0)) {
         cout << "Switching to left lane" << endl;
+        double goal_s_pos = ocar_state.s_pos + distance_over_horizon;
+        double goal_s_vel = velocity_per_timestep;
+        int go_straight_follow_lead = ((next_feasible_states>>2) & 0x3);
+        // less aggressive lane change if we are already following
+        if (go_straight_follow_lead) {
+                // but only if following closely
+                if (lead_s - ocar_state.s_pos < collision_buf_length * 0.5) {
+                    goal_s_pos = ocar_state.s_pos + lead_s_dot * horizon;
+                    goal_s_vel = lead_s_dot;
+            }
+        }
+   
+        double goal_s_acc = 0.0;
+        double goal_d_pos = (2 + 4 * cur_lane) - 4;
+        double goal_d_vel = 0.0;
+        double goal_d_acc = 0.0;
+        vector<double> goal_vec = {goal_s_pos, goal_s_vel, goal_s_acc, goal_d_pos, goal_d_vel, goal_d_acc};
+        vector<vector<double>> goal_points_left = {goal_vec};
+        //perturb_goal(goal_vec, goal_points_left, true); //TODO: Revisit: Why true?
+        perturb_goal(goal_vec, goal_points_left);
+        // add to goal points
+        goal_points.reserve(goal_points.size() + goal_points_left.size());
+        goal_points.insert(goal_points.end(),goal_points_left.begin(),goal_points_left.end());
     }
 
+#if 1
     // Switch to right lane
-    if (((next_feasible_states>>6) & 0x3) != 0x0) {
+    if ((((next_feasible_states>>6) & 0x3) != 0x0) && (cur_lane != 2)) {
         cout << "Switching to right lane" << endl;
+        double goal_s_pos = ocar_state.s_pos + distance_over_horizon;
+        double goal_s_vel = velocity_per_timestep;
+        int go_straight_follow_lead = ((next_feasible_states>>2) & 0x3);
+        // less aggressive lane change if we are already following
+        if (go_straight_follow_lead) {
+                // but only if following closely
+                if (lead_s - ocar_state.s_pos < collision_buf_length * 0.5) {
+                    goal_s_pos = ocar_state.s_pos + lead_s_dot * horizon;
+                    goal_s_vel = lead_s_dot;
+            }   
+        }   
+   
+        double goal_s_acc = 0.0;
+        double goal_d_pos = (2 + 4 * cur_lane) + 4;
+        double goal_d_vel = 0.0;
+        double goal_d_acc = 0.0;
+        vector<double> goal_vec = {goal_s_pos, goal_s_vel, goal_s_acc, goal_d_pos, goal_d_vel, goal_d_acc};
+        vector<vector<double>> goal_points_right = {goal_vec};
+        //perturb_goal(goal_vec, goal_points_right, true); //TODO: Revisit: Why true?
+        perturb_goal(goal_vec, goal_points_right);
+        // add to goal points
+        goal_points.reserve(goal_points.size() + goal_points_right.size());
+        goal_points.insert(goal_points.end(),goal_points_right.begin(),goal_points_right.end());
     }
+#endif
 
 //cout << "size of goal_points: " << goal_points.size() << endl;
 
@@ -258,6 +340,26 @@ double JMT::buffer_cost(pair<Poly, Poly> const &traj, vector<Vehicle> const &veh
   return cost;
 }
 #endif
+
+double JMT::collision_cost(pair<Poly, Poly> const &traj, vector<Vehicle> const &vehicles) {
+
+  for (int t = 0; t < horizon; t++) {
+    for (int i = 0; i < vehicles.size(); i++) {
+      double ego_s = evaluate(traj.first, t);
+      double ego_d = evaluate(traj.second, t);
+      vector<double> traffic_state = vehicles[i].state_at(t); // {s,d}
+
+      double dif_s = abs(traffic_state[0] - ego_s);
+      double dif_d = abs(traffic_state[1] - ego_d);
+    
+      // make the envelope a little wider to stay "out of trouble"
+      if ((dif_s <= collision_buf_length) && (dif_d <= (3.0*collision_buf_width)))
+        return 1.0;
+    }   
+  }
+  return 0.0;
+}
+
 vector<vector<double>> JMT::find_least_cost_jmt(car_state ocar_state, plan_params oplan_params,
     vector<vector<double>> goal_points, vector<Vehicle> env_veh) {
 
@@ -349,7 +451,7 @@ vector<vector<double>> JMT::find_best_trajectory(car_state ocar_state, unsigned 
      * Generate goal points.
      */
     vector<vector<double>> goal_points;
-    goal_points = generate_goal_points(ocar_state, next_feasible_states, oplan_params, olane_info); 
+    goal_points = generate_goal_points(ocar_state, next_feasible_states, oplan_params, olane_info, env_veh); 
    
     /*
      * Generate jerk minimized trajectory 

@@ -4,6 +4,7 @@
 //#include "common.h"
 #include "path_planner.h"
 #include "jmt.h"
+#include "behavior_planner.h"
 
 using namespace std;
 
@@ -45,6 +46,9 @@ vector<vector<double>> PathPlanner::plan_path (car_state ocar_state,
     vector<Vehicle> env_veh, plan_params oplan_params) {
 
     lane_info olane_info;
+    JMT jmt;
+    BehaviorPlanner behavior_plan;
+
     /*
      * Get current lane
      */
@@ -60,12 +64,15 @@ vector<vector<double>> PathPlanner::plan_path (car_state ocar_state,
     /*
      * Behavioral Planning
      */
-    unsigned char next_feasible_states = 0x1; //TODO: Replace this with behavior planner output.
+    unsigned int next_feasible_states; 
+    next_feasible_states = behavior_plan.get_feasible_next_states(olane_info,
+                             ocar_state, env_veh,
+                             jmt.collision_buf_length);
+     cout << "Next feasible state: " << next_feasible_states << endl;
 
     /*
      * Jerk minimizing trajectory 
      */
-     JMT jmt;
      vector<vector<double>> new_path;
      new_path = jmt.find_best_trajectory(ocar_state, next_feasible_states, oplan_params, olane_info, env_veh);
 

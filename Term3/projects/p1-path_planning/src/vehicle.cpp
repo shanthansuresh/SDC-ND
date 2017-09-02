@@ -23,3 +23,11 @@ vector<double> Vehicle::state_at(double t) const {
 
     return {s_future, d_pos};
 }
+
+double Vehicle::get_s(void) {
+    return s_pos;
+}
+
+double Vehicle::get_s_dot(void) {
+    return s_vel;
+}

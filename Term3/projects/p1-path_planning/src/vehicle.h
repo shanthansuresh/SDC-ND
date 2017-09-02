@@ -21,6 +21,8 @@ public:
                                              {0,0,0,0},{0,0,0,0},{0,0,0,0},{0,0,0,0},{0,0,0,0}};
 
     vector<double> state_at(double t) const;
+    double get_s(void);
+    double get_s_dot(void);
 };
 
 #endif //_PLANNER_H_

@@ -580,6 +580,7 @@ cout << "car lane: " << car_d << endl;
     plan_params oplan_params;
     oplan_params.horizon = 120; //TODO: Revisit this
     oplan_params.max_speed = 50; //TODO: Revisit this
+    //oplan_params.max_speed = 30; //TODO: Revisit this
     
     vector<vector<double>> new_path;
     new_path = PPlanner.plan_path(ocar_state, env_veh, oplan_params);

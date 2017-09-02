@@ -17,15 +17,16 @@ typedef struct {
 
 class JMT {
 public:
+    const double car_width = 1;
+    const double car_length = 4;
+    const double collision_buf_width = car_width;
+    //const double collision_buf_length = 5*car_length;
+    const double collision_buf_length = 10*car_length; //TODO: Revisit
     vector<vector<double>> find_best_trajectory(car_state ocar_state, unsigned char next_feasible_states,
     plan_params oplan_params, lane_info olane_info, vector<Vehicle> env_veh);
 
 private:
     int horizon;
-    const double car_width = 1;
-    const double car_length = 4;
-    const double collision_buf_width = car_width;
-    const double collision_buf_length = 5*car_length;
     std::map<std::string, double> cost_weights = {
                                             {"traffic_buf_cost", 140.0},
                                             {"efficiency_cost", 110.0},
@@ -46,7 +47,7 @@ private:
 
     void get_stats_per_horizon(plan_params oplan_params);
     vector<vector<double>> generate_goal_points(car_state ocar_state, unsigned char next_feasible_states,
-        plan_params oplan_params, lane_info olane_info);
+        plan_params oplan_params, lane_info olane_info, vector<Vehicle> env_veh);
     Poly jmt(vector< double> start, vector <double> end, double T);
     vector<vector<double>> find_least_cost_jmt(car_state ocar_state, plan_params oplan_params,
         vector<vector<double>> goal_points, vector<Vehicle> env_veh);
@@ -56,6 +57,7 @@ private:
 
     double logistic(double x);
     double buffer_cost(pair<Poly, Poly> const &traj, vector<Vehicle> const &vehicles);
+    double collision_cost(pair<Poly, Poly> const &traj, vector<Vehicle> const &vehicles);
 };
 
 
