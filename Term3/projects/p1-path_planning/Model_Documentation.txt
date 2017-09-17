@@ -1,0 +1,46 @@
+[1] Path Planning Project:
+(a) Behavior Planning:
+      I use the sensor fusion data to determine if the ego car needs to switch lanes. 
+      If the car ahead of ego car is moving slower than the maximum allowed speed of 50mi/hr,
+      then I check the s-distance between the ego car and other cars in the other lanes.
+      If the distance is greater than heuristically chosen thresholds, and the speeds are 
+      suitable, then I switch the ego car to suitable lane.
+
+(b) Prediction:
+     There is no implementation of the prediction module, as I assume that the cars
+     are moving at constant velocity and seldom change lanes.
+
+(c) Trajectory Generator:
+     For smooth trajectory generation, I make use of the splines as exlained in the classroom concept.
+     I use waypoints from the previously generated paths that are not consumed by the simulator, along
+     with the waypoints generated in the current cycle. This makes the trajectory smooth.
+
+
+Rubric Criteria:
+[a] The code compiles correctly.
+>> Yes.
+
+[b] The car is able to drive at least 4.32 miles without incident..
+>> Yes, I have tested it for multiple iterations to make sure that velocity, acceleration,
+   jerk are not exceeded the specified limits. Also, I have programmed the ego car to
+   drive less aggressively, to avoid collision.
+
+[c] The car drives according to the speed limit.
+>> Yes, most of the times the car tries to be at 50mi/hr. If not, it considers changing lanes
+   to make sure that the velocity is not considerably lesser than the 50mi/hr value.
+
+[d] Max Acceleration and Jerk are not Exceeded.
+>> Yes, The car does not exceed a total acceleration of 10 m/s^2 and a jerk of 10 m/s^3.
+
+[e] Car does not have collisions.
+>> Yes.
+
+[f] The car stays in its lane, except for the time between changing lanes.
+>> Yes.
+
+[g] The car is able to change lanes
+>> Yes.
+
+[h] There is a reflection on how to generate paths.
+>> You are looking at it currently.
+
