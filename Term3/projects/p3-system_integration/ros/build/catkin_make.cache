@@ -1,0 +1,2 @@
+styx:styx_msgs:tl_detector:twist_controller:waypoint_follower:waypoint_loader:waypoint_updater
+-DCATKIN_DEVEL_PREFIX=/home/shanthans/Documents/Projects/SDC/Term3/Course/Projects/p3_carnd_capstone/team/frank/Last_project/ros/devel -DCMAKE_INSTALL_PREFIX=/home/shanthans/Documents/Projects/SDC/Term3/Course/Projects/p3_carnd_capstone/team/frank/Last_project/ros/install -G Unix Makefiles

@@ -1,0 +1,8 @@
+prefix=/home/shanthans/Documents/Projects/SDC/Term3/Course/Projects/p3_carnd_capstone/team/frank/Last_project/ros/devel
+
+Name: styx
+Description: Description of styx
+Version: 0.0.0
+Cflags: 
+Libs: -L/home/shanthans/Documents/Projects/SDC/Term3/Course/Projects/p3_carnd_capstone/team/frank/Last_project/ros/devel/lib 
+Requires: 
