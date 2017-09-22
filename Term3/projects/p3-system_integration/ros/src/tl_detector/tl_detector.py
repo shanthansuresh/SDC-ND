@@ -11,6 +11,7 @@ import tf
 import cv2
 from traffic_light_config import config
 import tl_utils
+import threading
 
 STATE_COUNT_THRESHOLD = 3
 
@@ -39,6 +40,21 @@ class TLDetector(object):
         self.upcoming_red_light_pub = rospy.Publisher('/traffic_waypoint', Int32, queue_size=1)
 
         self.bridge = CvBridge()
+       
+        #TODO: Revisit
+        ###  Tensorflow takes a while to load up,
+        self.light_classifier_is_ready = False
+
+        def wait_for_loading_network():
+            self.light_classifier_is_ready = True
+            print("TL classifier loaded")
+            t.cancel()
+
+        print("Loading TL classifier (5 second timer)")
+        t = threading.Timer(5.0, wait_for_loading_network)
+        t.daemon = True
+        t.start()
+
         self.light_classifier = TLClassifier()
         self.listener = tf.TransformListener()
 
@@ -92,7 +108,7 @@ class TLDetector(object):
         """
         self.has_image = True
         self.camera_image = msg
-        #light_wp, state = self.process_traffic_lights()
+        light_wp, state = self.process_traffic_lights()
 
         
         args = [self.pose, self.waypoints, self.camera_image, self.tl_positions]
@@ -220,18 +236,30 @@ class TLDetector(object):
             int: ID of traffic light color (specified in styx_msgs/TrafficLight)
 
         """
-        light = None
-        light_positions = config.light_positions
-        if(self.pose):
-            car_position = self.get_closest_waypoint(self.pose.pose)
+        #light = None
+        #light_positions = config.light_positions
+        #if(self.pose):
+            #car_position = self.get_closest_waypoint(self.pose.pose)
 
         #TODO find the closest visible traffic light (if one exists)
 
-        if light:
-            state = self.get_light_state(light)
-            return light_wp, state
-        self.waypoints = None
-        return -1, TrafficLight.UNKNOWN
+        #if light:
+            #state = self.get_light_state(light)
+            #return light_wp, state
+        #self.waypoints = None
+        #return -1, TrafficLight.UNKNOWN
+
+        if (not self.has_image):
+            rospy.logerr("Image not available to classify")
+            return False
+
+        state = TrafficLight.UNKNOWN   # Default state
+        cv_image = self.bridge.imgmsg_to_cv2(self.camera_image, "rgb8")
+        if self.light_classifier_is_ready is True:
+            state = self.light_classifier.get_classification(cv_image)
+            #rospy.loginfo('State: %d', int(state)) 
+
+        return -1, state
 
 if __name__ == '__main__':
     try:
