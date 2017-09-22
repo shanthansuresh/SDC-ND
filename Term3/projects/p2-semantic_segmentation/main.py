@@ -18,6 +18,11 @@ if not tf.test.gpu_device_name():
 else:
     print('Default GPU Device: {}'.format(tf.test.gpu_device_name()))
 
+"""
+  Initialize the weights with bilinear interpolation type 
+  of values.
+  Ref: http://cv-tricks.com/image-segmentation/transpose-convolution-in-tensorflow/
+""" 
 def get_deconv_filter(f_shape):
     width = f_shape[0]
     heigh = f_shape[0]
@@ -36,6 +41,7 @@ def get_deconv_filter(f_shape):
                                    dtype=tf.float32)
     var = tf.get_variable(name="up_filter", initializer=init,
                           shape=weights.shape)
+
     return var
 
 def _bias_variable(shape, constant=0.0):
@@ -46,8 +52,7 @@ def _bias_variable(shape, constant=0.0):
         return var
 
 
-def _variable_with_weight_decay(shape, stddev, wd, decoder=False):
-        """Helper to create an initialized Variable with weight decay.
+"""Helper to create an initialized Variable with weight decay.
 
         Note that the Variable is initialized with a truncated normal
         distribution.
@@ -63,26 +68,30 @@ def _variable_with_weight_decay(shape, stddev, wd, decoder=False):
         Returns:
           Variable Tensor
         """
+def apply_weight_decay(shape, stddev, wd, decoder=False):
+    initializer = tf.truncated_normal_initializer(stddev=stddev)
+    var = tf.get_variable('weights', shape=shape,
+                          initializer=initializer)
 
-        initializer = tf.truncated_normal_initializer(stddev=stddev)
-        var = tf.get_variable('weights', shape=shape,
-                              initializer=initializer)
-
-        collection_name = tf.GraphKeys.REGULARIZATION_LOSSES
-        if wd and (not tf.get_variable_scope().reuse):
-            weight_decay = tf.multiply(
-                tf.nn.l2_loss(var), wd, name='weight_loss')
-            tf.add_to_collection(collection_name, weight_decay)
-        #_variable_summaries(var)
+    collection_name = tf.GraphKeys.REGULARIZATION_LOSSES
+    if wd and (not tf.get_variable_scope().reuse):
+        weight_decay = tf.multiply(tf.nn.l2_loss(var), wd, name='weight_loss')
+        tf.add_to_collection(collection_name, weight_decay)
+        
         return var
 
-
-def _score_layer(bottom, name, num_classes):
+"""
+ Perform 1x1 convolution on the 'bottom' layer
+"""
+def do_1x1_conv(bottom, name, num_classes):
     with tf.variable_scope(name) as scope:
         # get number of input channels
         in_features = bottom.get_shape()[3].value
+
+        #Form shape of the filter
         shape = [1, 1, in_features, num_classes]
-        # He initialization Sheme
+
+        # Initialization scheme
         if name == "score_fr":
             num_input = in_features
             stddev = (2 / num_input)**0.5
@@ -90,17 +99,18 @@ def _score_layer(bottom, name, num_classes):
             stddev = 0.001
         elif name == "score_pool3":
             stddev = 0.0001
-        # Apply convolution
-        w_decay = 5e-4
 
-        weights = _variable_with_weight_decay(shape, stddev, w_decay,
+        # Apply weight decay
+        w_decay = 5e-4
+        weights = apply_weight_decay(shape, stddev, w_decay,
                                                    decoder=True)
+
+        # Perform 1x1 convolution
         conv = tf.nn.conv2d(bottom, weights, [1, 1, 1, 1], padding='SAME')
+
         # Apply bias
         conv_biases = _bias_variable([num_classes], constant=0.0)
         bias = tf.nn.bias_add(conv, conv_biases)
-
-        #_activation_summary(bias)
 
         return bias
 
@@ -116,10 +126,15 @@ def _add_wd_and_summary(var, wd, collection_name=None):
 
     return var
 
-def _upscore_layer(bottom, shape,
-                   num_classes, name, debug,
-                   ksize=4, stride=2):
+"""
+ Perform transposed convolution on the 'bottom' layer.
+"""
+def do_transposed_conv(bottom, shape, num_classes, name, debug,
+                       ksize=4, stride=2):
+
+    #Form the strides array.
     strides = [1, stride, stride, 1]
+
     with tf.variable_scope(name):
         in_features = bottom.get_shape()[3].value
 
@@ -132,19 +147,23 @@ def _upscore_layer(bottom, shape,
             new_shape = [in_shape[0], h, w, num_classes]
         else:
             new_shape = [shape[0], shape[1], shape[2], num_classes]
+
         output_shape = tf.stack(new_shape)
 
-        #logging.debug("Layer: %s, Fan-in: %d" % (name, in_features))
+        # Form the filter shape
         f_shape = [ksize, ksize, num_classes, in_features]
 
-        # create
+        # apply weight decay
+        w_decay = 5e-4
         num_input = ksize * ksize * in_features / stride
         stddev = (2 / num_input)**0.5
-
         weights = get_deconv_filter(f_shape)
-        _add_wd_and_summary(weights, 5e-4, "fc_wlosses")
+        _add_wd_and_summary(weights, w_decay, "fc_wlosses")
+
+        #Perform transposed convolution
         deconv = tf.nn.conv2d_transpose(bottom, weights, output_shape,
                                         strides=strides, padding='SAME')
+
         if debug:
             deconv = tf.Print(deconv, [tf.shape(deconv)],
                               message='Shape of %s' % name,
@@ -193,25 +212,25 @@ def layers(image_input, vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_clas
     :return: The Tensor for the last layer of output
     """
     # TODO: Implement function
-    upscore2 = _upscore_layer(vgg_layer7_out,
+    upscore2 = do_transposed_conv(vgg_layer7_out,
                               shape=tf.shape(vgg_layer4_out),
                               num_classes=num_classes,
                               debug=True, name='upscore2',
                               ksize=4, stride=2)
-    score_pool4 = _score_layer(vgg_layer4_out, "score_pool4",
+    score_pool4 = do_1x1_conv(vgg_layer4_out, "score_pool4",
                                num_classes=num_classes)
     fuse_pool4 = tf.add(upscore2, score_pool4)
 
-    upscore4 = _upscore_layer(fuse_pool4,
+    upscore4 = do_transposed_conv(fuse_pool4,
                               shape=tf.shape(vgg_layer3_out),
                               num_classes=num_classes,
                               debug=True, name='upscore4',
                               ksize=4, stride=2)
-    score_pool3 = _score_layer(vgg_layer3_out, "score_pool3",
+    score_pool3 = do_1x1_conv(vgg_layer3_out, "score_pool3",
                               num_classes=num_classes)
     fuse_pool3 = tf.add(upscore4, score_pool3)
 
-    upscore32 = _upscore_layer(fuse_pool3,
+    upscore32 = do_transposed_conv(fuse_pool3,
                                shape=tf.shape(image_input),
                                num_classes=num_classes,
                                debug=True, name='upscore32',
@@ -219,7 +238,6 @@ def layers(image_input, vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_clas
 
     #pred_up = tf.argmax(upscore32, dimension=3)
 
-    #return None
     return upscore32
 #tests.test_layers(layers)
 
