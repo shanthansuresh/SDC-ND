@@ -81,7 +81,7 @@ class TLClassifier(object):
 
             time1 = time.time()
 
-            print("Time in milliseconds", (time1 - time0) * 1000)
+            #print("Time in milliseconds", (time1 - time0) * 1000)
 
             boxes = np.squeeze(boxes)
             scores = np.squeeze(scores)
@@ -96,7 +96,7 @@ class TLClassifier(object):
                     class_name = self.category_index[classes[i]]['name']
                     # class_id = self.category_index[classes[i]]['id']  # if needed
 
-                    print('{}'.format(class_name))
+                    #print('{}'.format(class_name))
 
                     # Traffic light thing
                     self.current_light = TrafficLight.UNKNOWN
@@ -108,13 +108,13 @@ class TLClassifier(object):
                     elif class_name == 'Yellow':
                         self.current_light = TrafficLight.YELLOW
             
-            if self.current_light == TrafficLight.RED:
+            '''if self.current_light == TrafficLight.RED:
                 print('RED')
             elif self.current_light == TrafficLight.GREEN:
                 print('GREEN')
             elif self.current_light == TrafficLight.YELLOW:
                 print('YELLOW')
             else:
-                print('NO_LIGHT')
+                print('NO_LIGHT')'''
 
         return self.current_light  

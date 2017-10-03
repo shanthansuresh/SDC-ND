@@ -68,19 +68,27 @@ def find_nearest_tl_ahead(waypoints, car_pose, traffic_lights):
     car_index = get_closest_wp_index(car_pose, wps_mat)
 
     #rospy.loginfo('car_pose:(%f, %f)', car_pose.x, car_pose.y)
+    #rospy.loginfo('car_idx:%d', car_index)
 
     # Arrange track waypoints so they start at car position
     wps_ahead = waypoints[car_index:] + waypoints[:car_index]
     wps_ahead_mat = get_wps_matrix(wps_ahead)
 
     distances = []
+    wp_indices = []
 
+    #rospy.loginfo("----Distance----")
     for traffic_light in traffic_lights:
         waypoint_index = get_closest_wp_index(traffic_light.pose.pose.position, wps_ahead_mat)
         distance = get_road_distance(wps_ahead[:waypoint_index])
+        #rospy.loginfo(distance)
         distances.append(distance)
+        wp_indices.append(waypoint_index)
 
     closest_traffic_light_index = np.argmin(distances)
 
-    return closest_traffic_light_index, traffic_lights[closest_traffic_light_index]
+    #tl_abs_wp_index = car_index + wp_indices[closest_traffic_light_index]
+
+    #return closest_traffic_light_index, traffic_lights[closest_traffic_light_index],
+    return closest_traffic_light_index, car_index, wp_indices[closest_traffic_light_index]
   
