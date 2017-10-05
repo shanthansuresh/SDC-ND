@@ -13,13 +13,16 @@ import time
 
 class TLClassifier(object):
     def __init__(self):
-        self.simulator = True #Set to false for real car.
+        #self.simulator = True #Set to false for real car.
+        self.simulator = rospy.get_param("/simulator") #Set to false for real car.
       
         cwd = os.path.dirname(os.path.realpath(__file__)) 
         if self.simulator == True:
+            print("In SIMULATOR")
             CKPT = cwd + "/graphs/frozen_inference_graph.pb"
         else:
-            rospy.logerr("Need to add model for real car")    
+            print("In CAR")
+            CKPT = cwd + "/graphs/frozen_inference_graph_real.pb"
 
         PATH_TO_LABELS = cwd+'/graphs/object-detection.pbtxt'
         NUM_CLASSES = 3 # 3, as pretrained on udacity real car dataset with 3 classes

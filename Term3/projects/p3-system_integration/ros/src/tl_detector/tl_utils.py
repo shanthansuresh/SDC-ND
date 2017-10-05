@@ -8,14 +8,14 @@ from styx_msgs.msg import TrafficLightArray, TrafficLight
 import traffic_light_config
 
 DEBUG = True
+
+# Convert tl config values to Lane messages.
 def convert_tl_config_to_lane_msgs():
-    #print("In __func__")
     traffic_lights = TrafficLightArray()
 
     tl_list = []
  
     tl_height = rospy.get_param("/tl_height_sim")
-    #traffic_light_positions = traffic_light_config.config['light_positions']
 
     for traffic_light_index, traffic_light_position in enumerate(traffic_light_config.config['light_positions']):
         traffic_light = TrafficLight()
@@ -35,6 +35,7 @@ def convert_tl_config_to_lane_msgs():
 
     return traffic_lights
 
+# Get the road distance from the car, by calculating piecewise sum of waypoint distances.
 def get_road_distance(waypoints):
     total_distance = 0.0
 
@@ -46,7 +47,7 @@ def get_road_distance(waypoints):
 
     return total_distance
 
-
+# Get the closest waypoint to position value.
 def get_closest_wp_index(position, wps_mat):
     x_dist = wps_mat[:, 0] - position.x
     y_dist = wps_mat[:, 1] - position.y
@@ -54,6 +55,7 @@ def get_closest_wp_index(position, wps_mat):
     squared_dist = x_dist ** 2 + y_dist ** 2
     return np.argmin(squared_dist)
 
+# Convert waypoints to np matrices, to facilitate computation.
 def get_wps_matrix(waypoints):
     wps_mat = np.zeros(shape=(len(waypoints), 2), dtype=np.float32)
 
@@ -63,12 +65,10 @@ def get_wps_matrix(waypoints):
 
     return wps_mat
 
+# Find the nearest traffic light ahead of the car.
 def find_nearest_tl_ahead(waypoints, car_pose, traffic_lights):
     wps_mat = get_wps_matrix(waypoints)
     car_index = get_closest_wp_index(car_pose, wps_mat)
-
-    #rospy.loginfo('car_pose:(%f, %f)', car_pose.x, car_pose.y)
-    #rospy.loginfo('car_idx:%d', car_index)
 
     # Arrange track waypoints so they start at car position
     wps_ahead = waypoints[car_index:] + waypoints[:car_index]
@@ -87,8 +87,5 @@ def find_nearest_tl_ahead(waypoints, car_pose, traffic_lights):
 
     closest_traffic_light_index = np.argmin(distances)
 
-    #tl_abs_wp_index = car_index + wp_indices[closest_traffic_light_index]
-
-    #return closest_traffic_light_index, traffic_lights[closest_traffic_light_index],
     return closest_traffic_light_index, car_index, wp_indices[closest_traffic_light_index]
   

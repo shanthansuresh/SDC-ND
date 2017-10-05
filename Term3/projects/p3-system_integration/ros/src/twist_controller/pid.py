@@ -24,6 +24,7 @@ class PID(object):
 
         integral = self.int_val + error * sample_time;
         derivative = (error - self.last_error) / sample_time;
+	# Using the filter
 	derivative = self.lp_filter.filt(derivative)
 
         y = self.kp * error + self.ki * self.int_val + self.kd * derivative;

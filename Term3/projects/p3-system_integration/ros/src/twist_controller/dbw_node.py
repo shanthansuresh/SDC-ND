@@ -7,29 +7,6 @@ from geometry_msgs.msg import TwistStamped
 
 from twist_controller import Controller
 
-'''
-You can build this node only after you have built (or partially built) the `waypoint_updater` node.
-
-You will subscribe to `/twist_cmd` message which provides the proposed linear and angular velocities.
-You can subscribe to any other message that you find important or refer to the document for list
-of messages subscribed to by the reference implementation of this node.
-
-One thing to keep in mind while building this node and the `twist_controller` class is the status
-of `dbw_enabled`. While in the simulator, its enabled all the time, in the real car, that will
-not be the case. This may cause your PID controller to accumulate error because the car could
-temporarily be driven by a human instead of your controller.
-
-We have provided two launch files with this node. Vehicle specific values (like vehicle_mass,
-wheel_base) etc should not be altered in these files.
-
-We have also provided some reference implementations for PID controller and other utility classes.
-You are free to use them or build your own.
-
-Once you have the proposed throttle, brake, and steer values, publish it on the various publishers
-that we have created in the `__init__` function.
-
-'''
-
 class DBWNode(object):
     def __init__(self):
         rospy.init_node('dbw_node')
@@ -48,17 +25,20 @@ class DBWNode(object):
         max_steer_angle = rospy.get_param('~max_steer_angle', 8.)
 
 
+	# Setting up all needed self.variables
         self.linear_velocity_future = None
         self.angular_velocity_future = None
         self.linear_velocity_current = None
         self.angular_velocity_current = None
-        self.acceleration_current = None
         self.dbw_enabled = None
 
-	self.time_help = None
+	# Necessary to calculate the time difference between this controller step & the future one
+	self.time_last = None
 
-        self.rate = 50 # Rate in Hz
+	# Rate in which we publish throttle, brake and steer
+        self.rate = 50
 
+	# Publisher for steer, throttle, brake
         self.steer_pub = rospy.Publisher('/vehicle/steering_cmd',
                                          SteeringCmd, queue_size=1)
         self.throttle_pub = rospy.Publisher('/vehicle/throttle_cmd',
@@ -66,18 +46,17 @@ class DBWNode(object):
         self.brake_pub = rospy.Publisher('/vehicle/brake_cmd',
                                          BrakeCmd, queue_size=1)
 
-        # TODO: Create `TwistController` object
+        # Our Twist-Controller
         self.controller = Controller(
             vehicle_mass = vehicle_mass,
             fuel_capacity = fuel_capacity,
             brake_deadband = brake_deadband,
             decel_limit = decel_limit,
             accel_limit = accel_limit,
-            wheel_radius = wheel_radius,
-            rate = self.rate
+            wheel_radius = wheel_radius
             )
 
-        # TODO: Subscribe to all the topics you need to
+        # Subscribe to all needed topics (twist, velocity, dbw_enabled)
         rospy.Subscriber('/twist_cmd', TwistStamped, self.twistcmd_cb, queue_size=1)
         rospy.Subscriber('/current_velocity', TwistStamped, self.cur_vel_cb, queue_size=1)
         rospy.Subscriber('/vehicle/dbw_enabled', Bool, self.dbw_enabled_cb, queue_size=1)
@@ -89,33 +68,39 @@ class DBWNode(object):
 
     def loop(self):
         rospy.loginfo('DBWNode: Started looping')
+
+	# Using the rate to publish with 50 Hertz
         rate = rospy.Rate(self.rate)
+
+	
         while not rospy.is_shutdown():
 
-	    now = rospy.get_rostime()
+	    # Get the time
+	    time_now = rospy.get_rostime()
 
 	    if self.has_valid_data():
-		diff = now - self.time_help
+		# Get the time difference between steps
+		time_diff = time_now - self.time_last
 
+		# Getting throttle, brake and steer with our Controller
 		throttle, brake, steer = self.controller.control(
                	 linear_velocity_future = self.linear_velocity_future, 
               	 angular_velocity_future = self.angular_velocity_future, 
                  linear_velocity_current = self.linear_velocity_current, 
                  angular_velocity_current = self.angular_velocity_current,
-                 acceleration_current = self.acceleration_current,
-		 time_step = diff.to_sec())
+		 time_step = time_diff.to_sec())
 
-            	#rospy.loginfo('DBWNode: Controller output: throttle -> %.2f     brake -> %.2f     steer -> %.2f', throttle, brake, steer)
-		#rospy.loginfo('_____________________')
-		#rospy.loginfo(self.linear_velocity_future)
-		#rospy.loginfo(self.linear_velocity_current)
-
+		# Publish throttle, brake and steer here
             	self.publish(throttle, brake, steer)
-	    self.time_help = now
-
+	    # Setting time_last to our time_now-value for the next step
+	    self.time_last = time_now
+		
+	    # Sleep with the help of rate
             rate.sleep()
 
+    # The publish-function for throttle, brake & steer
     def publish(self, throttle, brake, steer):
+	# Make sure not so brake and throttle at the same time
         if brake > 0.0:
             bcmd = BrakeCmd()
             bcmd.enable = True
@@ -135,35 +120,30 @@ class DBWNode(object):
         self.steer_pub.publish(scmd)
 
 
-    # TODO: Implement
+    # Twist callback-function
     def twistcmd_cb(self, msg):
         self.linear_velocity_future = msg.twist.linear.x
         self.angular_velocity_future = msg.twist.angular.z
-        #rospy.loginfo('DBWNode: Updated twist')
 
 
-    # TODO: Implement
+    # Current velocity callback-function
     def cur_vel_cb(self, msg):
-        if (self.linear_velocity_current is not None):
-            self.acceleration_current = self.rate * (self.linear_velocity_current - msg.twist.linear.x)
         self.linear_velocity_current = msg.twist.linear.x
         self.angular_velocity_current = msg.twist.angular.z
-        #rospy.loginfo('DBWNode: Updated velocity')
 
 
-    # TODO: Implement
+    # Looking up if dbw is enabled with callback-function
     def dbw_enabled_cb(self, msg):
         self.dbw_enabled = msg.data
-        rospy.loginfo('DBWNode: Updated dbw_enabled with %d', self.dbw_enabled)
 
+	# Resetting Controller when dbw is not enabled
         if (not self.dbw_enabled):
             self.controller.reset()
 
+    # Looking up if we have valid data to work with
     def has_valid_data(self):
-        return (self.time_help is not None) & (self.linear_velocity_future is not None) & (self.linear_velocity_current is not None)
+        return (self.time_last is not None) & (self.linear_velocity_future is not None) & (self.linear_velocity_current is not None)
         
         
-
-
 if __name__ == '__main__':
     DBWNode()

@@ -20,4 +20,7 @@
 
     <!--Traffic Light height parameter-->
     <param name="tl_height_sim" value="5.837643" />
+    
+    <!--Simulator versus site flag-->
+    <param name="simulator" value="True" />
 </launch>
