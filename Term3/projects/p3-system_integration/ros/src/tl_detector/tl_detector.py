@@ -129,8 +129,10 @@ class TLDetector(object):
                 self.prev_nearest_tl_idx = tl_idx
                 rospy.loginfo('nearest tl:(%d)', tl_idx)
 
-            #if (tl_car_wp_idx < 100):
-            _, state = self.process_traffic_lights()
+            if (tl_car_wp_idx < 100):
+                _, state = self.process_traffic_lights()
+            else:
+                state = self.last_state
             light_wp = car_wp_idx + tl_car_wp_idx
             if self.state != state:
                 self.state_count = 0

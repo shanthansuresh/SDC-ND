@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 
 import rospy
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, TwistStamped
 from styx_msgs.msg import Lane, Waypoint
 from std_msgs.msg import Int32
 import tf
+import copy
 
 import math
 
@@ -34,6 +35,7 @@ class WaypointUpdater(object):
         rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb, queue_size = 1)
         rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb, queue_size = 1)
         rospy.Subscriber('/traffic_light', Int32, self.tf_cb, queue_size = 1)
+        rospy.Subscriber('/current_velocity', TwistStamped, self.twist_cb, queue_size=1);
 
         # TODO: Uncomment when traffic light detection node and/or obstacle detection node is implemented
         rospy.Subscriber('/traffic_waypoint', Int32, self.traffic_cb)
@@ -47,6 +49,7 @@ class WaypointUpdater(object):
 
         # Container for current base waypoints received via subscribtion to '/base_waypoints'
         self.base_waypoints = None
+        self.base_waypoints_copy = None
 
         self.last_waypoint_id = None
 
@@ -55,6 +58,8 @@ class WaypointUpdater(object):
         self.tf_waypoint = None
 
         self.need = 0
+
+        self.counter = 0
 
         self.save_velocity = 0
 
@@ -88,7 +93,8 @@ class WaypointUpdater(object):
             next_wp.twist = wp.twist
             #if (self.need > 200) & (self.drive > 0):
             if (self.need > 0) & (self.drive > 0):
-                next_wp.twist.twist.linear.x = self.save_velocity
+                #next_wp.twist.twist.linear.x = self.save_velocity
+                next_wp.twist.twist.linear.x = self.get_waypoint_velocity(self.base_waypoints_copy[idx_cur])
             wps_ahead.waypoints.append(next_wp)
             idx_cur = (idx_cur + 1) % waypoints_len
         #if (self.need > 200) & (self.drive > 0):
@@ -98,7 +104,8 @@ class WaypointUpdater(object):
         #self.stopping(753, idx_wp_ahead, wps_ahead)
         #rospy.loginfo(self.tf_state)
         #rospy.loginfo(self.need)
-        if self.tf_state > 300:
+        #if self.tf_state > 300:
+        if self.tf_state > -1:
             #rospy.loginfo(self.tf_state)
             self.stopping(self.tf_state, idx_wp_ahead, wps_ahead)
         #rospy.loginfo(self.need)
@@ -119,9 +126,11 @@ class WaypointUpdater(object):
         self.pose = msg.pose
         '''if (self.base_waypoints and self.pose):
             self.publish()
-            rospy.loginfo('WaypointUpdater: Updated pose - x: %.2f - y: %.2f', self.pose.position.x, self.pose.position.y)
-            rospy.loginfo('WaypointUpdater: Published waypoints ahead, first waypoint - x: %.2f - y: %.2f', self.wps_ahead.waypoints[0].pose.pose.position.x, self.wps_ahead.waypoints[0].pose.pose.position.y)'''
+            #rospy.loginfo('WaypointUpdater: Updated pose - x: %.2f - y: %.2f', self.pose.position.x, self.pose.position.y)
+            #rospy.loginfo('WaypointUpdater: Published waypoints ahead, first waypoint - x: %.2f - y: %.2f', self.wps_ahead.waypoints[0].pose.pose.position.x, self.wps_ahead.waypoints[0].pose.pose.position.y)'''
 
+    def twist_cb(self, msg):
+        self.twist = msg.twist
 
     def waypoints_cb(self, waypoints):
         """
@@ -130,6 +139,7 @@ class WaypointUpdater(object):
         """
 
         self.base_waypoints = waypoints.waypoints
+        self.base_waypoints_copy = copy.deepcopy(self.base_waypoints)
         #rospy.loginfo('WaypointUpdater: Updated with current waypoints')
 
     def tf_cb(self, waypoint):
@@ -194,6 +204,7 @@ class WaypointUpdater(object):
                     j = i-3
                     if j < 0:
                         j = j + len(self.base_waypoints)
+                    j = j % len(self.base_waypoints)
                     dist = self.get_eucl_distance(self.base_waypoints[j].pose.pose.position.x, self.base_waypoints[j].pose.pose.position.y,self.pose.position.x,self.pose.position.y)
                     if dist < min_wp_dist:
                         min_wp_dist = dist
@@ -216,7 +227,7 @@ class WaypointUpdater(object):
         if wp_x_local > 0.0:
             return idx_wp_closest
         else:
-            return idx_wp_closest + 1
+            return (idx_wp_closest + 1) % len(self.base_waypoints)
         
     def transform_wp_to_local(self, wp):
         """
@@ -242,17 +253,38 @@ class WaypointUpdater(object):
         return math.sqrt((x2-x1)**2 + (y2-y1)**2)
 
     def stopping(self, idx, idx_wp_ahead, wps_ahead):
-        if (idx - LOOKAHEAD_WPS < idx_wp_ahead < idx):
+        #if (idx - LOOKAHEAD_WPS < idx_wp_ahead < idx):
             if (self.drive == 0):
-                self.save_velocity = self.get_waypoint_velocity(self.base_waypoints[idx])
+                #self.save_velocity = self.get_waypoint_velocity(self.base_waypoints[idx])
                 self.drive = 1
-            wp_until_tl = idx - idx_wp_ahead - 6
+                k = 0
+                self.counter = 0
+                while k < 6.5*(self.twist.linear.x/11.112):
+                    k = self.distance(self.base_waypoints, idx-self.counter, idx)
+                    self.counter = self.counter + 1
+                    if self.counter > LOOKAHEAD_WPS/4:
+                        break
+                      
+            #wp_until_tl = idx - idx_wp_ahead - 6
+            wp_until_tl = idx - idx_wp_ahead
+
+            #if wp_until_tl < 0:
+            if wp_until_tl < (-1*len(self.base_waypoints)/2):
+                wp_until_tl = wp_until_tl + len(self.base_waypoints)
+
+            wp_until_tl = wp_until_tl - self.counter
+
             if wp_until_tl < 0:
                 wp_until_tl = 0
+
             if wp_until_tl <= LOOKAHEAD_WPS:
                 parting_wp = wps_ahead.waypoints[wp_until_tl]
+
             for i in range(wp_until_tl, LOOKAHEAD_WPS):
                 self.set_waypoint_velocity(wps_ahead.waypoints, i, 0.)
+
+            #rospy.loginfo(wp_until_tl)
+
             for i in range(wp_until_tl-1, -1, -1):
                 wp = wps_ahead.waypoints[i]
                 d = self.distance(wps_ahead.waypoints, i, i + 1)
